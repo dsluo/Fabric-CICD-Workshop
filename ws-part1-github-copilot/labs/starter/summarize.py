@@ -28,9 +28,15 @@ def top_region(totals: dict[str, float]) -> tuple[str, float] | None:
 def main():
     parser = argparse.ArgumentParser(description="Summarize sales by region.")
     parser.add_argument("path", help="Path to the sales CSV")
+    parser.add_argument("--region", help="Summarize only this region")
     args = parser.parse_args()
     try:
-        totals, average = summarize(load_rows(args.path))
+        rows = load_rows(args.path)
+        if args.region is not None:
+            if not any(row["region"] == args.region for row in rows):
+                parser.exit(2, f"Error: unknown region {args.region!r}\n")
+            rows = [row for row in rows if row["region"] == args.region]
+        totals, average = summarize(rows)
     except (OSError, ValueError) as error:
         parser.exit(2, f"Error: {error}\n")
     for region, amount in sorted(totals.items()):

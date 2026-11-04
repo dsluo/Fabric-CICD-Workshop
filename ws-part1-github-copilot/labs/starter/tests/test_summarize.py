@@ -1,9 +1,22 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from summarize import load_rows as load, summarize, top_region
 
 
 DATA = Path(__file__).resolve().parents[1] / "data"
+SCRIPT = Path(__file__).resolve().parents[1] / "summarize.py"
+
+
+def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *arguments],
+        cwd=SCRIPT.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def test_load_sales():
@@ -35,3 +48,33 @@ def test_top_region_breaks_ties_alphabetically():
 
 def test_top_region_with_no_totals():
     assert top_region({}) is None
+
+
+def test_cli_filters_to_east():
+    result = run_cli("--region", "East", str(DATA / "sales.csv"))
+
+    assert result.returncode == 0
+    assert result.stdout == "East: 150.00\nAverage per region: 150.00\n"
+    assert result.stderr == ""
+
+
+def test_cli_rejects_unknown_case_sensitive_region():
+    result = run_cli("--region", "east", str(DATA / "sales.csv"))
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "unknown region 'east'" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_default_output_is_unchanged():
+    result = run_cli(str(DATA / "sales.csv"))
+
+    assert result.returncode == 0
+    assert result.stdout == (
+        "East: 150.00\n"
+        "North: 75.00\n"
+        "West: 250.00\n"
+        "Average per region: 158.33\n"
+    )
+    assert result.stderr == ""
