@@ -2,6 +2,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from summarize import load_rows as load, summarize, top_region
 
 
@@ -78,3 +80,71 @@ def test_cli_default_output_is_unchanged():
         "Average per region: 158.33\n"
     )
     assert result.stderr == ""
+
+
+def test_load_trims_regions_and_accepts_zero_amount(tmp_path: Path):
+    path = tmp_path / "sales.csv"
+    path.write_text("region,amount\n  East  ,0\n", encoding="utf-8")
+
+    assert load(path) == [{"region": "East", "amount": "0"}]
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("region,amount\n   ,10\n", "line 2: region must not be blank"),
+        ("region,amount\nEast,not-a-number\n", "line 2: invalid amount"),
+        ("region,amount\nEast,-1\n", "line 2: amount must be nonnegative"),
+        ("region,amount\nEast,nan\n", "line 2: amount must be finite"),
+        ("region,amount\nEast,inf\n", "line 2: amount must be finite"),
+        ("region,amount\nEast,-inf\n", "line 2: amount must be finite"),
+        ("region,amount\nEast\n", "line 2: malformed row"),
+        ("region,amount\nEast,1,extra\n", "line 2: malformed row"),
+    ],
+)
+def test_load_rejects_invalid_rows(tmp_path: Path, content: str, message: str):
+    path = tmp_path / "invalid.csv"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load(path)
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [
+        (DATA / "invalid-amount.csv", "line 3: invalid amount"),
+        (DATA / "missing-column.csv", "missing required column"),
+    ],
+)
+def test_cli_rejects_supplied_invalid_files(path: Path, message: str):
+    result = run_cli(str(path))
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert message in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_rejects_zero_byte_file(tmp_path: Path):
+    path = tmp_path / "empty.csv"
+    path.write_text("", encoding="utf-8")
+
+    result = run_cli(str(path))
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "missing required column" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cli_rejects_malformed_row_without_partial_report(tmp_path: Path):
+    path = tmp_path / "malformed.csv"
+    path.write_text("region,amount\nEast,100\nWest\n", encoding="utf-8")
+
+    result = run_cli(str(path))
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "line 3: malformed row" in result.stderr
+    assert "Traceback" not in result.stderr

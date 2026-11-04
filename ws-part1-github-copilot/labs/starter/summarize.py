@@ -1,10 +1,63 @@
 import argparse
 import csv
+import math
+from pathlib import Path
 
 
-def load_rows(path):
+def load_rows(path: str | Path) -> list[dict[str, str]]:
     with open(path, newline="", encoding="utf-8-sig") as source:
-        return list(csv.DictReader(source))
+        reader = csv.reader(source, strict=True)
+        try:
+            headers = next(reader)
+        except StopIteration:
+            headers = []
+        except csv.Error as error:
+            raise ValueError(
+                f"line {reader.line_num}: malformed CSV header: {error}"
+            ) from error
+
+        missing_columns = {"region", "amount"} - set(headers)
+        if missing_columns:
+            missing = ", ".join(sorted(missing_columns))
+            raise ValueError(f"missing required column(s): {missing}")
+
+        rows = []
+        while True:
+            try:
+                values = next(reader)
+            except StopIteration:
+                break
+            except csv.Error as error:
+                raise ValueError(
+                    f"line {reader.line_num}: malformed CSV: {error}"
+                ) from error
+
+            line_number = reader.line_num
+            if len(values) != len(headers):
+                raise ValueError(
+                    f"line {line_number}: malformed row "
+                    f"(expected {len(headers)} fields, found {len(values)})"
+                )
+
+            row = dict(zip(headers, values))
+            region = row["region"].strip()
+            if not region:
+                raise ValueError(f"line {line_number}: region must not be blank")
+
+            try:
+                amount = float(row["amount"])
+            except ValueError as error:
+                raise ValueError(
+                    f"line {line_number}: invalid amount {row['amount']!r}"
+                ) from error
+            if not math.isfinite(amount):
+                raise ValueError(f"line {line_number}: amount must be finite")
+            if amount < 0:
+                raise ValueError(f"line {line_number}: amount must be nonnegative")
+
+            row["region"] = region
+            rows.append(row)
+        return rows
 
 
 def summarize(rows: list[dict[str, str]]) -> tuple[dict[str, float], float]:
