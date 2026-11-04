@@ -7,7 +7,8 @@ def load_rows(path):
         return list(csv.DictReader(source))
 
 
-def summarize(rows):
+def summarize(rows: list[dict[str, str]]) -> tuple[dict[str, float], float]:
+    """Return regional sales totals and their mean."""
     totals = {}
     for row in rows:
         region = row["region"]
