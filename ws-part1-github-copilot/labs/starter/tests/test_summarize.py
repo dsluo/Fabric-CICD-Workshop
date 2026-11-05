@@ -37,6 +37,10 @@ def test_average_is_mean_of_regional_totals():
     assert average == (150.0 + 250.0 + 75.0) / 3
 
 
+def test_summarize_with_no_rows():
+    assert summarize([]) == ({}, 0.0)
+
+
 def test_top_region_with_normal_totals():
     assert top_region({"East": 150.0, "West": 250.0, "North": 75.0}) == (
         "West",
@@ -79,6 +83,14 @@ def test_cli_default_output_is_unchanged():
         "West: 250.00\n"
         "Average per region: 158.33\n"
     )
+    assert result.stderr == ""
+
+
+def test_cli_reports_header_only_csv():
+    result = run_cli(str(DATA / "empty.csv"))
+
+    assert result.returncode == 0
+    assert result.stdout == "Average per region: 0.00\n"
     assert result.stderr == ""
 
 
